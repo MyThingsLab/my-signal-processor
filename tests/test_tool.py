@@ -4,22 +4,12 @@ import json
 import math
 from pathlib import Path
 
-from mythings.engine import EngineRequest, EngineResult, NoopEngine
+from mythings.engine import NoopEngine
 from mythings.ledger import Ledger
 from mythings.policy import Action, Decision, PolicyResult
 
-from conftest import FakeRunner
+from conftest import ScriptedEngine, fake_gh
 from mysignalprocessor.tool import SignalProcessor
-
-
-class ScriptedEngine:
-    def __init__(self, reply: str) -> None:
-        self._reply = reply
-        self.requests: list[EngineRequest] = []
-
-    def run(self, request: EngineRequest) -> EngineResult:
-        self.requests.append(request)
-        return EngineResult(text=self._reply)
 
 
 class DenyPolicy:
@@ -82,7 +72,7 @@ def test_analyze_skips_engine_call_when_sample_cap_exceeded(tmp_path: Path) -> N
 
     assert result.outcome == "skipped"
     assert "sample_cap_exceeded" in result.detail
-    assert engine.requests == []
+    assert engine.calls == []
     entries = list(ledger)
     assert entries[-1].outcome == "skipped"
 
@@ -97,14 +87,14 @@ def test_analyze_skips_engine_call_on_empty_file(tmp_path: Path) -> None:
 
     assert result.outcome == "skipped"
     assert "empty" in result.detail
-    assert engine.requests == []
+    assert engine.calls == []
 
 
 def test_comment_posts_analysis_when_requested(tmp_path: Path) -> None:
     csv_path = tmp_path / "signal.csv"
     _write_sine_csv(csv_path, freq_hz=5.0, sample_rate=100.0, n=200)
     ledger = Ledger(tmp_path / "ledger.jsonl")
-    fake = FakeRunner()
+    fake = fake_gh()
     processor = SignalProcessor(ledger=ledger, repo="owner/name", runner=fake, engine=NoopEngine())
     result = processor.analyze(str(csv_path), sample_rate=100.0, issue=5, comment=True)
 
@@ -134,7 +124,7 @@ def test_comment_denied_by_policy_is_not_posted(tmp_path: Path) -> None:
     csv_path = tmp_path / "signal.csv"
     _write_sine_csv(csv_path, freq_hz=5.0, sample_rate=100.0, n=200)
     ledger = Ledger(tmp_path / "ledger.jsonl")
-    fake = FakeRunner()
+    fake = fake_gh()
     processor = SignalProcessor(
         ledger=ledger, repo="owner/name", runner=fake, engine=NoopEngine(), policy=DenyPolicy()
     )
